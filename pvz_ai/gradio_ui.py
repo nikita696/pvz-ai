@@ -4,6 +4,7 @@ import time
 import gradio as gr
 
 from pvz_ai.llm import LLMRequestOptions
+from pvz_ai.logging_config import emit_structured_log
 from pvz_ai.services import SYSTEM_PROMPT, ChatService
 
 logger = logging.getLogger(__name__)
@@ -74,14 +75,15 @@ def create_gradio_app(chat_service: ChatService) -> gr.ChatInterface:
             system_prompt=(selected_system_prompt or "").strip() or None,
         )
 
-        logger.info(
-            "gradio chat submitted provider_mode=%s model=%s "
-            "message_chars=%s history_items=%s",
-            options.provider_mode,
-            options.model or settings.llm_model,
-            len(message or ""),
-            history_length,
-            extra={"session_id": session_id or "-"},
+        emit_structured_log(
+            logger,
+            logging.INFO,
+            "gradio_chat_submitted",
+            provider_mode=options.provider_mode,
+            model=options.model or settings.llm_model,
+            message_chars=len(message or ""),
+            history_items=history_length,
+            session_id=session_id or "-",
         )
 
         try:
@@ -98,18 +100,27 @@ def create_gradio_app(chat_service: ChatService) -> gr.ChatInterface:
                 options.model or settings.llm_model,
                 extra={"session_id": session_id or "-"},
             )
+            emit_structured_log(
+                logger,
+                logging.ERROR,
+                "gradio_chat_failed",
+                provider_mode=options.provider_mode,
+                model=options.model or settings.llm_model,
+                session_id=session_id or "-",
+            )
             raise
 
         elapsed_ms = int((time.perf_counter() - start) * 1000)
-        logger.info(
-            "gradio chat completed provider=%s model=%s status=%s "
-            "fallback_used=%s elapsed_ms=%s",
-            turn.provider,
-            turn.model,
-            turn.status,
-            turn.fallback_used,
-            elapsed_ms,
-            extra={"session_id": turn.session_id},
+        emit_structured_log(
+            logger,
+            logging.INFO,
+            "gradio_chat_completed",
+            provider=turn.provider,
+            model=turn.model,
+            status=turn.status,
+            fallback_used=turn.fallback_used,
+            elapsed_ms=elapsed_ms,
+            session_id=turn.session_id,
         )
         return turn.answer, turn.session_id
 

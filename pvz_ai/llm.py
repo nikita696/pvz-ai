@@ -6,6 +6,7 @@ from typing import Literal, Protocol
 from openai import AsyncOpenAI
 
 from pvz_ai.config import Settings
+from pvz_ai.logging_config import emit_structured_log
 
 ChatPayload = list[dict[str, str]]
 ProviderMode = Literal["auto", "groq", "huggingface", "echo"]
@@ -169,26 +170,28 @@ class OpenAICompatibleClient:
             except Exception as exc:
                 last_error = exc
                 elapsed_ms = int((time.perf_counter() - start) * 1000)
-                logger.warning(
-                    "llm attempt failed provider=%s model=%s "
-                    "status_code=%s error=%s elapsed_ms=%s",
-                    provider,
-                    model,
-                    getattr(exc, "status_code", "-"),
-                    type(exc).__name__,
-                    elapsed_ms,
+                emit_structured_log(
+                    logger,
+                    logging.WARNING,
+                    "llm_attempt_failed",
+                    provider=provider,
+                    model=model,
+                    status_code=getattr(exc, "status_code", "-"),
+                    error=type(exc).__name__,
+                    elapsed_ms=elapsed_ms,
                 )
                 continue
 
             elapsed_ms = int((time.perf_counter() - start) * 1000)
             fallback_used = attempt_index > 0
-            logger.info(
-                "llm attempt completed provider=%s model=%s fallback_used=%s "
-                "elapsed_ms=%s",
-                result.provider,
-                result.model,
-                fallback_used,
-                elapsed_ms,
+            emit_structured_log(
+                logger,
+                logging.INFO,
+                "llm_attempt_completed",
+                provider=result.provider,
+                model=result.model,
+                fallback_used=fallback_used,
+                elapsed_ms=elapsed_ms,
             )
             return LLMResult(
                 content=result.content,

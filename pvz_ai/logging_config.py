@@ -1,6 +1,8 @@
+import json
 import logging
 import time
 from collections.abc import Awaitable, Callable
+from typing import Any
 from uuid import uuid4
 
 from fastapi import Request, Response
@@ -16,6 +18,32 @@ def redact(value: str) -> str:
     if any(word in lowered for word in SENSITIVE_WORDS):
         return "[redacted]"
     return value
+
+
+def safe_log_fields(fields: dict[str, Any]) -> dict[str, str]:
+    safe_fields: dict[str, str] = {}
+    for key, value in fields.items():
+        lowered_key = key.lower()
+        if any(word in lowered_key for word in SENSITIVE_WORDS):
+            safe_fields[key] = "[redacted]"
+            continue
+        safe_fields[key] = redact(str(value))
+    return safe_fields
+
+
+def emit_structured_log(
+    logger: logging.Logger,
+    level: int,
+    event: str,
+    **fields: Any,
+) -> None:
+    safe_fields = safe_log_fields(fields)
+    message = " ".join(f"{key}={value}" for key, value in safe_fields.items())
+    logger.log(level, "%s %s", event, message)
+    print(
+        json.dumps({"event": event, **safe_fields}, ensure_ascii=False),
+        flush=True,
+    )
 
 
 def setup_logging(settings: Settings) -> None:

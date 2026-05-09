@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from pvz_ai.config import Settings
 from pvz_ai.llm import LLMClient, LLMConfigurationError, LLMRequestOptions
+from pvz_ai.logging_config import emit_structured_log
 from pvz_ai.models import ChatMessage, ConversationSession, utc_now
 
 logger = logging.getLogger(__name__)
@@ -112,13 +113,15 @@ class ChatService:
             await db.commit()
 
             elapsed_ms = int((time.perf_counter() - start) * 1000)
-            logger.info(
-                "chat completed provider=%s model=%s fallback_used=%s elapsed_ms=%s",
-                result.provider,
-                result.model,
-                result.fallback_used,
-                elapsed_ms,
-                extra={"session_id": session.id},
+            emit_structured_log(
+                logger,
+                logging.INFO,
+                "chat_completed",
+                provider=result.provider,
+                model=result.model,
+                fallback_used=result.fallback_used,
+                elapsed_ms=elapsed_ms,
+                session_id=session.id,
             )
             return ChatTurn(
                 session_id=session.id,
@@ -226,12 +229,14 @@ class ChatService:
         )
         await db.commit()
 
-        logger.warning(
-            "chat provider failed provider=%s model=%s error=%s",
-            provider,
-            model,
-            type(exc).__name__,
-            extra={"session_id": session_id},
+        emit_structured_log(
+            logger,
+            logging.WARNING,
+            "chat_provider_failed",
+            provider=provider,
+            model=model,
+            error=type(exc).__name__,
+            session_id=session_id,
         )
 
         if raise_on_error:
