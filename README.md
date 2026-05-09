@@ -33,6 +33,9 @@ GROQ_API_KEY=...
 
 For local UI smoke without a model key, use `LLM_PROVIDER=echo`.
 
+If `DATABASE_URL` is not set, the app uses a SQLite fallback so preview/demo
+deployments do not fail silently. Production should still use Neon Postgres.
+
 ## Local Run
 
 With the virtual environment activated:
@@ -78,11 +81,13 @@ python -m pytest e2e
 
 Vercel needs these environment variables:
 
-- `DATABASE_URL`
 - `LLM_PROVIDER`
 - `LLM_BASE_URL`
 - `LLM_MODEL`
 - `GROQ_API_KEY` or `HF_TOKEN`
+
+For real dialog history on Vercel, also add `DATABASE_URL` from Neon. Without it,
+the preview falls back to temporary SQLite storage.
 
 GitHub Actions deploy also needs:
 

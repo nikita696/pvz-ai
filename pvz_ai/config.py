@@ -1,10 +1,17 @@
 from functools import lru_cache
+from os import getenv
 from typing import Literal
 
 from pydantic import Field, computed_field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 ProviderName = Literal["groq", "huggingface", "echo"]
+
+
+def default_database_url() -> str:
+    if getenv("VERCEL"):
+        return "sqlite+aiosqlite:////tmp/pvz_ai.sqlite"
+    return "sqlite+aiosqlite:///./data/pvz_ai.sqlite"
 
 
 class Settings(BaseSettings):
@@ -19,7 +26,7 @@ class Settings(BaseSettings):
     log_level: str = Field(default="INFO", validation_alias="LOG_LEVEL")
 
     database_url: str = Field(
-        default="postgresql+asyncpg://postgres:postgres@localhost:5432/pvz_ai",
+        default_factory=default_database_url,
         validation_alias="DATABASE_URL",
     )
     auto_create_tables: bool = Field(
@@ -60,6 +67,10 @@ class Settings(BaseSettings):
     @property
     def is_production(self) -> bool:
         return self.app_env.lower() == "production"
+
+    @property
+    def uses_sqlite_fallback(self) -> bool:
+        return self.database_url.startswith("sqlite+aiosqlite:")
 
 
 @lru_cache

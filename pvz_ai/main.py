@@ -11,7 +11,7 @@ from pvz_ai.gradio_ui import create_gradio_app
 from pvz_ai.llm import LLMClient, build_llm_client
 from pvz_ai.logging_config import RequestLoggingMiddleware, setup_logging
 from pvz_ai.schemas import ChatRequest, ChatResponse, HealthResponse
-from pvz_ai.services import ChatProviderError, ChatService
+from pvz_ai.services import ChatService
 
 
 def create_app(
@@ -23,7 +23,7 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        if settings.auto_create_tables:
+        if settings.auto_create_tables or settings.uses_sqlite_fallback:
             await create_tables(SessionLocal.kw["bind"])
         yield
 
@@ -60,11 +60,10 @@ def create_app(
             turn = await chat_service.send_message(
                 payload.message,
                 session_id=payload.session_id,
+                raise_on_error=False,
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
-        except ChatProviderError as exc:
-            raise HTTPException(status_code=503, detail=str(exc)) from exc
 
         return ChatResponse(
             session_id=turn.session_id,

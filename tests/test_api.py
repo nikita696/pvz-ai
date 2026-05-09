@@ -4,6 +4,15 @@ from pvz_ai.main import create_app
 from tests.conftest import FakeLLM
 
 
+class BrokenLLM:
+    provider = "broken"
+    model = "broken-model"
+
+    async def complete(self, messages):
+        del messages
+        raise RuntimeError("provider unavailable")
+
+
 async def test_health_endpoint(test_settings):
     app = create_app(settings=test_settings, llm_client=FakeLLM())
 
@@ -43,3 +52,28 @@ async def test_chat_endpoint_persists_and_returns_session(
     assert payload["session_id"]
     assert payload["provider"] == "test"
     assert payload["model"] == "test-model"
+
+
+async def test_chat_endpoint_returns_error_payload_when_provider_fails(
+    session_factory,
+    test_settings,
+    monkeypatch,
+):
+    from pvz_ai import main
+
+    monkeypatch.setattr(main, "SessionLocal", session_factory)
+    app = create_app(settings=test_settings, llm_client=BrokenLLM())
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.post("/api/chat", json={"message": "Hello"})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert (
+        payload["answer"] == "The model request failed. Please try again in a moment."
+    )
+    assert payload["status"] == "error"
+    assert payload["provider"] == "broken"

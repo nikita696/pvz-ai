@@ -2,6 +2,26 @@ from pvz_ai.config import Settings
 from pvz_ai.database import normalize_database_url
 
 
+def test_default_database_url_is_local_sqlite_fallback(monkeypatch):
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("VERCEL", raising=False)
+
+    settings = Settings(_env_file=None)
+
+    assert settings.database_url == "sqlite+aiosqlite:///./data/pvz_ai.sqlite"
+    assert settings.uses_sqlite_fallback is True
+
+
+def test_vercel_database_fallback_uses_tmp(monkeypatch):
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.setenv("VERCEL", "1")
+
+    settings = Settings(_env_file=None)
+
+    assert settings.database_url == "sqlite+aiosqlite:////tmp/pvz_ai.sqlite"
+    assert settings.uses_sqlite_fallback is True
+
+
 def test_groq_defaults_to_openai_compatible_endpoint():
     settings = Settings(
         LLM_PROVIDER="groq",
