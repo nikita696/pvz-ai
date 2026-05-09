@@ -3,7 +3,7 @@ from pvz_ai.database import normalize_database_url
 
 
 def test_groq_defaults_to_openai_compatible_endpoint():
-    settings = Settings(GROQ_API_KEY="groq-key")
+    settings = Settings(LLM_PROVIDER="groq", GROQ_API_KEY="groq-key")
 
     assert settings.llm_provider == "groq"
     assert settings.resolved_llm_base_url == "https://api.groq.com/openai/v1"
