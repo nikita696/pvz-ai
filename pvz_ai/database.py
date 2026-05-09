@@ -1,5 +1,6 @@
 from collections.abc import AsyncIterator
 from pathlib import Path
+from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 from sqlalchemy.ext.asyncio import (
     AsyncEngine,
@@ -18,10 +19,45 @@ class Base(DeclarativeBase):
 
 def normalize_database_url(database_url: str) -> str:
     if database_url.startswith("postgres://"):
-        return database_url.replace("postgres://", "postgresql+asyncpg://", 1)
+        database_url = database_url.replace("postgres://", "postgresql+asyncpg://", 1)
     if database_url.startswith("postgresql://"):
-        return database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+        database_url = database_url.replace("postgresql://", "postgresql+asyncpg://", 1)
+
+    if database_url.startswith("postgresql+asyncpg://"):
+        database_url = normalize_asyncpg_query(database_url)
+
     return database_url
+
+
+def normalize_asyncpg_query(database_url: str) -> str:
+    parsed = urlsplit(database_url)
+    query_items = []
+    ssl_value: str | None = None
+
+    for key, value in parse_qsl(parsed.query, keep_blank_values=True):
+        if key == "sslmode":
+            if value in {"require", "verify-ca", "verify-full"}:
+                ssl_value = value
+            continue
+        if key == "channel_binding":
+            continue
+        if key == "ssl":
+            ssl_value = value
+            continue
+        query_items.append((key, value))
+
+    if ssl_value:
+        query_items.append(("ssl", ssl_value))
+
+    return urlunsplit(
+        (
+            parsed.scheme,
+            parsed.netloc,
+            parsed.path,
+            urlencode(query_items),
+            parsed.fragment,
+        )
+    )
 
 
 def ensure_sqlite_parent(database_url: str) -> None:

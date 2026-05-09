@@ -51,3 +51,12 @@ def test_legacy_postgres_url_is_normalized_for_asyncpg():
         normalize_database_url("postgresql://user:pass@host/db")
         == "postgresql+asyncpg://user:pass@host/db"
     )
+
+
+def test_neon_url_query_is_normalized_for_asyncpg():
+    assert (
+        normalize_database_url(
+            "postgresql://user:pass@host/db?sslmode=require&channel_binding=require"
+        )
+        == "postgresql+asyncpg://user:pass@host/db?ssl=require"
+    )
