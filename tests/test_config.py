@@ -31,14 +31,17 @@ def test_groq_defaults_to_openai_compatible_endpoint():
 
     assert settings.llm_provider == "groq"
     assert settings.resolved_llm_base_url == "https://api.groq.com/openai/v1"
+    assert settings.groq_base_url == "https://api.groq.com/openai/v1"
     assert settings.resolved_api_key == "groq-key"
     assert settings.llm_model == "openai/gpt-oss-120b"
+    assert settings.llm_top_p == 1.0
 
 
 def test_huggingface_uses_hf_token_and_router():
     settings = Settings(LLM_PROVIDER="huggingface", HF_TOKEN="hf-token")
 
     assert settings.resolved_llm_base_url == "https://router.huggingface.co/v1"
+    assert settings.hf_base_url == "https://router.huggingface.co/v1"
     assert settings.resolved_api_key == "hf-token"
 
 

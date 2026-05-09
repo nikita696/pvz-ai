@@ -8,7 +8,7 @@ configuration.
 
 - FastAPI backend with `/health`, `/api/chat`, and mounted Gradio UI at `/chat`
 - Groq OpenAI-compatible API as the default `openai/gpt-oss-120b` provider
-- Optional Hugging Face Inference Providers router fallback
+- Automatic Hugging Face Inference Providers router fallback when `HF_TOKEN` is set
 - SQLAlchemy async models and Alembic migrations for PostgreSQL
 - Docker Compose for local app + Postgres
 - GitHub Actions for lint, tests, Playwright smoke, and Vercel deploy
@@ -28,13 +28,22 @@ DATABASE_URL=postgresql+asyncpg://USER:PASSWORD@HOST.neon.tech/DBNAME?ssl=requir
 LLM_PROVIDER=groq
 LLM_BASE_URL=https://api.groq.com/openai/v1
 LLM_MODEL=openai/gpt-oss-120b
+LLM_TEMPERATURE=0.3
+LLM_TOP_P=1.0
+LLM_MAX_TOKENS=1024
 GROQ_API_KEY=...
+HF_TOKEN=...
 ```
 
 For local UI smoke without a model key, use `LLM_PROVIDER=echo`.
 
 If `DATABASE_URL` is not set, the app uses a SQLite fallback so preview/demo
 deployments do not fail silently. Production should still use Neon Postgres.
+
+The Gradio UI includes a collapsed `Model settings` panel with provider mode,
+model, temperature, top-p, max token, and system prompt controls. In `auto` mode
+the app tries the primary provider first and then falls back to Hugging Face
+when a Hugging Face token is configured.
 
 ## Local Run
 
@@ -83,7 +92,12 @@ Vercel needs these environment variables:
 
 - `LLM_PROVIDER`
 - `LLM_BASE_URL`
+- `GROQ_BASE_URL`
+- `HF_BASE_URL`
 - `LLM_MODEL`
+- `LLM_TEMPERATURE`
+- `LLM_TOP_P`
+- `LLM_MAX_TOKENS`
 - `GROQ_API_KEY` or `HF_TOKEN`
 
 For real dialog history on Vercel, also add `DATABASE_URL` from Neon. Without it,

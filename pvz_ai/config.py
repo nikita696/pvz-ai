@@ -36,6 +36,14 @@ class Settings(BaseSettings):
 
     llm_provider: ProviderName = Field(default="groq", validation_alias="LLM_PROVIDER")
     llm_base_url: str | None = Field(default=None, validation_alias="LLM_BASE_URL")
+    groq_base_url: str = Field(
+        default="https://api.groq.com/openai/v1",
+        validation_alias="GROQ_BASE_URL",
+    )
+    hf_base_url: str = Field(
+        default="https://router.huggingface.co/v1",
+        validation_alias="HF_BASE_URL",
+    )
     llm_model: str = Field(
         default="openai/gpt-oss-120b",
         validation_alias="LLM_MODEL",
@@ -43,6 +51,7 @@ class Settings(BaseSettings):
     groq_api_key: str | None = Field(default=None, validation_alias="GROQ_API_KEY")
     hf_token: str | None = Field(default=None, validation_alias="HF_TOKEN")
     llm_temperature: float = Field(default=0.3, validation_alias="LLM_TEMPERATURE")
+    llm_top_p: float = Field(default=1.0, validation_alias="LLM_TOP_P")
     llm_max_tokens: int = Field(default=1024, validation_alias="LLM_MAX_TOKENS")
     history_limit: int = Field(default=20, validation_alias="HISTORY_LIMIT")
 
@@ -52,8 +61,8 @@ class Settings(BaseSettings):
         if self.llm_base_url:
             return self.llm_base_url
         if self.llm_provider == "huggingface":
-            return "https://router.huggingface.co/v1"
-        return "https://api.groq.com/openai/v1"
+            return self.hf_base_url
+        return self.groq_base_url
 
     @computed_field
     @property

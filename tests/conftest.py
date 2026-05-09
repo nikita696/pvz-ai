@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from pvz_ai.config import Settings
 from pvz_ai.database import Base
+from pvz_ai.llm import LLMRequestOptions, LLMResult
 
 
 class FakeLLM:
@@ -12,10 +13,20 @@ class FakeLLM:
     def __init__(self, answer: str = "test answer") -> None:
         self.answer = answer
         self.messages: list[list[dict[str, str]]] = []
+        self.options: list[LLMRequestOptions | None] = []
 
-    async def complete(self, messages: list[dict[str, str]]) -> str:
+    async def complete(
+        self,
+        messages: list[dict[str, str]],
+        options: LLMRequestOptions | None = None,
+    ) -> LLMResult:
         self.messages.append(messages)
-        return self.answer
+        self.options.append(options)
+        return LLMResult(
+            content=self.answer,
+            provider=self.provider,
+            model=self.model,
+        )
 
 
 @pytest_asyncio.fixture

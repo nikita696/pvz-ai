@@ -13,7 +13,7 @@ def test_gradio_chat_smoke(page):
 
     page.goto(f"{base_url.rstrip('/')}/chat", wait_until="domcontentloaded")
     page.wait_for_load_state("load")
-    textbox = page.get_by_role("textbox").last
+    textbox = page.get_by_placeholder("Напиши сообщение")
     textbox.fill("Привет")
     textbox.press("Enter")
 

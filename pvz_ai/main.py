@@ -60,6 +60,7 @@ def create_app(
             turn = await chat_service.send_message(
                 payload.message,
                 session_id=payload.session_id,
+                model_options=payload.to_llm_options(),
                 raise_on_error=False,
             )
         except ValueError as exc:
@@ -71,6 +72,7 @@ def create_app(
             provider=turn.provider,
             model=turn.model,
             status=turn.status,
+            fallback_used=turn.fallback_used,
         )
 
     gradio_app = create_gradio_app(chat_service)

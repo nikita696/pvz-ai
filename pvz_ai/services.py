@@ -6,7 +6,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
 from pvz_ai.config import Settings
-from pvz_ai.llm import LLMClient, LLMConfigurationError
+from pvz_ai.llm import LLMClient, LLMConfigurationError, LLMRequestOptions
 from pvz_ai.models import ChatMessage, ConversationSession, utc_now
 
 logger = logging.getLogger(__name__)
@@ -28,6 +28,7 @@ class ChatTurn:
     provider: str
     model: str
     status: str = "ok"
+    fallback_used: bool = False
 
 
 class ChatService:
@@ -46,12 +47,14 @@ class ChatService:
         message: str,
         session_id: str | None = None,
         *,
+        model_options: LLMRequestOptions | None = None,
         raise_on_error: bool = True,
     ) -> ChatTurn:
         cleaned_message = message.strip()
         if not cleaned_message:
             raise ValueError("Message cannot be empty.")
 
+        model_options = model_options or LLMRequestOptions()
         start = time.perf_counter()
         async with self.session_factory() as db:
             session = await self._get_or_create_session(db, session_id, cleaned_message)
@@ -63,10 +66,14 @@ class ChatService:
             )
             await db.flush()
 
-            messages = await self._build_llm_messages(db, session.id)
+            messages = await self._build_llm_messages(
+                db,
+                session.id,
+                system_prompt=model_options.system_prompt,
+            )
 
             try:
-                answer = await self.llm_client.complete(messages)
+                result = await self.llm_client.complete(messages, model_options)
             except LLMConfigurationError as exc:
                 answer = (
                     "LLM provider is not configured yet. "
@@ -77,6 +84,7 @@ class ChatService:
                     session.id,
                     answer,
                     exc,
+                    model_options,
                     raise_on_error,
                 )
             except Exception as exc:
@@ -86,6 +94,7 @@ class ChatService:
                     session.id,
                     answer,
                     exc,
+                    model_options,
                     raise_on_error,
                 )
 
@@ -93,26 +102,30 @@ class ChatService:
                 db,
                 session_id=session.id,
                 role="assistant",
-                content=answer,
-                provider=self.llm_client.provider,
-                model=self.llm_client.model,
+                content=result.content,
+                provider=result.provider,
+                model=result.model,
             )
+            session.provider = result.provider
+            session.model = result.model
             session.updated_at = utc_now()
             await db.commit()
 
             elapsed_ms = int((time.perf_counter() - start) * 1000)
             logger.info(
-                "chat completed provider=%s model=%s elapsed_ms=%s",
-                self.llm_client.provider,
-                self.llm_client.model,
+                "chat completed provider=%s model=%s fallback_used=%s elapsed_ms=%s",
+                result.provider,
+                result.model,
+                result.fallback_used,
                 elapsed_ms,
                 extra={"session_id": session.id},
             )
             return ChatTurn(
                 session_id=session.id,
-                answer=answer,
-                provider=self.llm_client.provider,
-                model=self.llm_client.model,
+                answer=result.content,
+                provider=result.provider,
+                model=result.model,
+                fallback_used=result.fallback_used,
             )
 
     async def _get_or_create_session(
@@ -167,6 +180,7 @@ class ChatService:
         self,
         db: AsyncSession,
         session_id: str,
+        system_prompt: str | None = None,
     ) -> list[dict[str, str]]:
         stmt = (
             select(ChatMessage)
@@ -177,7 +191,12 @@ class ChatService:
         result = await db.execute(stmt)
         stored_messages = list(reversed(result.scalars().all()))
 
-        messages = [{"role": "system", "content": SYSTEM_PROMPT}]
+        prompt = (
+            system_prompt.strip()
+            if system_prompt and system_prompt.strip()
+            else SYSTEM_PROMPT
+        )
+        messages = [{"role": "system", "content": prompt}]
         messages.extend(
             {"role": item.role, "content": item.content}
             for item in stored_messages
@@ -191,24 +210,26 @@ class ChatService:
         session_id: str,
         answer: str,
         exc: Exception,
+        model_options: LLMRequestOptions,
         raise_on_error: bool,
     ) -> ChatTurn:
+        provider, model = self._requested_provider_model(model_options)
         await self._store_message(
             db,
             session_id=session_id,
             role="assistant",
             content=answer,
             status="error",
-            provider=self.llm_client.provider,
-            model=self.llm_client.model,
+            provider=provider,
+            model=model,
             error_message=type(exc).__name__,
         )
         await db.commit()
 
         logger.warning(
             "chat provider failed provider=%s model=%s error=%s",
-            self.llm_client.provider,
-            self.llm_client.model,
+            provider,
+            model,
             type(exc).__name__,
             extra={"session_id": session_id},
         )
@@ -219,7 +240,16 @@ class ChatService:
         return ChatTurn(
             session_id=session_id,
             answer=answer,
-            provider=self.llm_client.provider,
-            model=self.llm_client.model,
+            provider=provider,
+            model=model,
             status="error",
         )
+
+    def _requested_provider_model(
+        self,
+        model_options: LLMRequestOptions,
+    ) -> tuple[str, str]:
+        provider = model_options.provider_mode
+        if provider == "auto":
+            provider = self.llm_client.provider
+        return provider, model_options.model or self.llm_client.model
