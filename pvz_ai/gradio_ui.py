@@ -12,7 +12,7 @@ logger = logging.getLogger(__name__)
 
 def create_gradio_app(chat_service: ChatService) -> gr.ChatInterface:
     settings = chat_service.settings
-    session_state = gr.State(value=None)
+    session_state = gr.Textbox(value="", visible=False, label="Session")
 
     provider_mode = gr.Dropdown(
         choices=[
@@ -66,6 +66,7 @@ def create_gradio_app(chat_service: ChatService) -> gr.ChatInterface:
     ) -> tuple[str, str]:
         start = time.perf_counter()
         history_length = len(history or [])
+        session_id = session_id or None
         options = LLMRequestOptions(
             provider_mode=selected_provider_mode or "auto",
             model=(selected_model or "").strip() or None,
