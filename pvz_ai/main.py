@@ -53,16 +53,40 @@ def create_app(
                 <title>pvz-ai</title>
                 <style>
                   body { font-family: system-ui, sans-serif; max-width: 760px;
-                         margin: 12vh auto; padding: 0 24px; line-height: 1.5; }
+                         margin: 10vh auto; padding: 0 24px; line-height: 1.5; }
                   code { background: #f3f4f6; padding: 2px 6px; border-radius: 6px; }
+                  .box { border: 1px solid #e5e7eb; border-radius: 8px;
+                         padding: 18px; margin: 20px 0; background: #fafafa; }
+                  .muted { color: #4b5563; }
+                  button { border: 0; border-radius: 6px; padding: 8px 12px;
+                           background: #111827; color: white; cursor: pointer; }
                 </style>
               </head>
               <body>
                 <h1>pvz-ai OpenAI-compatible backend</h1>
-                <p>Use Open WebUI with API base URL <code>/v1</code>.</p>
+                <p class="muted">
+                  This page is the API backend, not the Open WebUI chat screen.
+                  Open WebUI runs as a separate app and connects to this backend.
+                </p>
+                <div class="box">
+                  <p>Open WebUI API base URL:</p>
+                  <p><code id="base-url"></code></p>
+                  <button type="button" onclick="copyBaseUrl()">Copy base URL</button>
+                </div>
+                <p>
+                  With Docker Compose, open Open WebUI at
+                  <code>http://127.0.0.1:3000</code> and use any non-empty API key.
+                </p>
                 <p>Health: <a href="/health">/health</a></p>
                 <p>Models: <a href="/v1/models">/v1/models</a></p>
                 <p>Docs: <a href="/docs">/docs</a></p>
+                <script>
+                  const baseUrl = `${window.location.origin}/v1`;
+                  document.getElementById("base-url").textContent = baseUrl;
+                  async function copyBaseUrl() {
+                    await navigator.clipboard.writeText(baseUrl);
+                  }
+                </script>
               </body>
             </html>
             """)
