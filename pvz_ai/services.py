@@ -131,6 +131,96 @@ class ChatService:
                 fallback_used=result.fallback_used,
             )
 
+    async def complete_messages(
+        self,
+        messages: list[dict[str, str]],
+        session_id: str | None = None,
+        *,
+        model_options: LLMRequestOptions | None = None,
+        raise_on_error: bool = True,
+    ) -> ChatTurn:
+        cleaned_messages = self._prepare_external_messages(
+            messages,
+            system_prompt=(model_options or LLMRequestOptions()).system_prompt,
+        )
+        last_user_message = self._last_user_message(cleaned_messages)
+        if not last_user_message:
+            raise ValueError("At least one user message is required.")
+
+        model_options = model_options or LLMRequestOptions()
+        start = time.perf_counter()
+        async with self.session_factory() as db:
+            session = await self._get_or_create_session(
+                db,
+                session_id,
+                last_user_message,
+            )
+            await self._store_message(
+                db,
+                session_id=session.id,
+                role="user",
+                content=last_user_message,
+            )
+            await db.flush()
+
+            try:
+                result = await self.llm_client.complete(cleaned_messages, model_options)
+            except LLMConfigurationError as exc:
+                answer = (
+                    "LLM provider is not configured yet. "
+                    "Set GROQ_API_KEY for Groq or HF_TOKEN for Hugging Face."
+                )
+                return await self._handle_llm_error(
+                    db,
+                    session.id,
+                    answer,
+                    exc,
+                    model_options,
+                    raise_on_error,
+                )
+            except Exception as exc:
+                answer = "The model request failed. Please try again in a moment."
+                return await self._handle_llm_error(
+                    db,
+                    session.id,
+                    answer,
+                    exc,
+                    model_options,
+                    raise_on_error,
+                )
+
+            await self._store_message(
+                db,
+                session_id=session.id,
+                role="assistant",
+                content=result.content,
+                provider=result.provider,
+                model=result.model,
+            )
+            session.provider = result.provider
+            session.model = result.model
+            session.updated_at = utc_now()
+            await db.commit()
+
+            elapsed_ms = int((time.perf_counter() - start) * 1000)
+            emit_structured_log(
+                logger,
+                logging.INFO,
+                "openai_chat_completed",
+                provider=result.provider,
+                model=result.model,
+                fallback_used=result.fallback_used,
+                elapsed_ms=elapsed_ms,
+                session_id=session.id,
+            )
+            return ChatTurn(
+                session_id=session.id,
+                answer=result.content,
+                provider=result.provider,
+                model=result.model,
+                fallback_used=result.fallback_used,
+            )
+
     async def _get_or_create_session(
         self,
         db: AsyncSession,
@@ -258,3 +348,32 @@ class ChatService:
         if provider == "auto":
             provider = self.llm_client.provider
         return provider, model_options.model or self.llm_client.model
+
+    def _prepare_external_messages(
+        self,
+        messages: list[dict[str, str]],
+        system_prompt: str | None = None,
+    ) -> list[dict[str, str]]:
+        prepared = [
+            {"role": item["role"], "content": item["content"].strip()}
+            for item in messages
+            if item.get("role") in {"system", "user", "assistant"}
+            and item.get("content", "").strip()
+        ]
+        prompt = (
+            system_prompt.strip()
+            if system_prompt and system_prompt.strip()
+            else SYSTEM_PROMPT
+        )
+        if prepared and prepared[0]["role"] == "system":
+            if system_prompt and system_prompt.strip():
+                prepared[0] = {"role": "system", "content": prompt}
+            return prepared
+        return [{"role": "system", "content": prompt}, *prepared]
+
+    @staticmethod
+    def _last_user_message(messages: list[dict[str, str]]) -> str | None:
+        for message in reversed(messages):
+            if message["role"] == "user":
+                return message["content"]
+        return None

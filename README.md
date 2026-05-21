@@ -1,12 +1,14 @@
 # pvz-ai
 
-FastAPI + Gradio chat MVP for `openai/gpt-oss-120b`, with SQLAlchemy dialog history,
-PostgreSQL storage, Docker, pytest, Playwright smoke coverage, logging, and Vercel deploy
-configuration.
+FastAPI OpenAI-compatible backend for Open WebUI and `openai/gpt-oss-120b`,
+with SQLAlchemy dialog history, PostgreSQL storage, Docker, pytest, Playwright
+smoke coverage, logging, and Vercel deploy configuration.
 
 ## Stack
 
-- FastAPI backend with `/health`, `/api/chat`, and mounted Gradio UI at `/chat`
+- FastAPI backend with `/health`, legacy `/api/chat`, and OpenAI-compatible
+  `/v1/models` + `/v1/chat/completions`
+- Open WebUI as the chat frontend
 - Groq OpenAI-compatible API as the default `openai/gpt-oss-120b` provider
 - Automatic Hugging Face Inference Providers router fallback when `HF_TOKEN` is set
 - SQLAlchemy async models and Alembic migrations for PostgreSQL
@@ -35,15 +37,25 @@ GROQ_API_KEY=...
 HF_TOKEN=...
 ```
 
-For local UI smoke without a model key, use `LLM_PROVIDER=echo`.
+For local Open WebUI smoke without a model key, use `LLM_PROVIDER=echo`.
 
 If `DATABASE_URL` is not set, the app uses a SQLite fallback so preview/demo
 deployments do not fail silently. Production should still use Neon Postgres.
 
-The Gradio UI includes a collapsed `Model settings` panel with provider mode,
-model, temperature, top-p, max token, and system prompt controls. In `auto` mode
-the app tries the primary provider first and then falls back to Hugging Face
-when a Hugging Face token is configured.
+Open WebUI connects to this app as an OpenAI-compatible provider. The API base
+URL is:
+
+```text
+http://127.0.0.1:8000/v1
+```
+
+Use any non-empty API key for local Open WebUI, for example `pvz-ai-local`.
+
+The `/v1/models` endpoint exposes:
+
+- `openai/gpt-oss-120b` for automatic Groq -> Hugging Face fallback
+- `openai/gpt-oss-120b:groq` for Groq-only debugging
+- `openai/gpt-oss-120b:huggingface` for Hugging Face-only debugging
 
 ## Local Run
 
@@ -58,7 +70,8 @@ python -m uvicorn pvz_ai.main:app --reload
 Open:
 
 - `http://127.0.0.1:8000/health`
-- `http://127.0.0.1:8000/chat`
+- `http://127.0.0.1:8000/v1/models`
+- `http://127.0.0.1:8000/docs`
 
 If the virtual environment is not activated, use:
 
@@ -75,7 +88,8 @@ Once Docker Desktop is installed:
 docker compose up --build
 ```
 
-The app will be available at `http://127.0.0.1:8000/chat`.
+The backend will be available at `http://127.0.0.1:8000`, and Open WebUI will
+be available at `http://127.0.0.1:3000`.
 
 ## Tests
 

@@ -115,3 +115,87 @@ async def test_chat_endpoint_returns_error_payload_when_provider_fails(
     )
     assert payload["status"] == "error"
     assert payload["provider"] == "broken"
+
+
+async def test_openai_models_endpoint(test_settings):
+    app = create_app(settings=test_settings, llm_client=FakeLLM())
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.get("/v1/models")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["object"] == "list"
+    assert any(model["id"] == test_settings.llm_model for model in payload["data"])
+
+
+async def test_openai_chat_completion_non_streaming(
+    session_factory,
+    test_settings,
+    monkeypatch,
+):
+    from pvz_ai import main
+
+    monkeypatch.setattr(main, "SessionLocal", session_factory)
+    llm = FakeLLM(answer="Open WebUI answer")
+    app = create_app(settings=test_settings, llm_client=llm)
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.post(
+            "/v1/chat/completions",
+            json={
+                "model": "openai/gpt-oss-120b:huggingface",
+                "messages": [{"role": "user", "content": "Hello"}],
+                "temperature": 0.2,
+                "max_tokens": 128,
+                "metadata": {"chat_id": "chat-1"},
+            },
+        )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["object"] == "chat.completion"
+    assert payload["model"] == "openai/gpt-oss-120b:huggingface"
+    assert payload["choices"][0]["message"] == {
+        "role": "assistant",
+        "content": "Open WebUI answer",
+    }
+    assert payload["pvz_ai"]["session_id"]
+    assert llm.options[0].provider_mode == "huggingface"
+    assert llm.options[0].model == "openai/gpt-oss-120b"
+
+
+async def test_openai_chat_completion_streaming(
+    session_factory,
+    test_settings,
+    monkeypatch,
+):
+    from pvz_ai import main
+
+    monkeypatch.setattr(main, "SessionLocal", session_factory)
+    app = create_app(settings=test_settings, llm_client=FakeLLM(answer="stream answer"))
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app),
+        base_url="http://test",
+    ) as client:
+        response = await client.post(
+            "/v1/chat/completions",
+            json={
+                "model": "openai/gpt-oss-120b",
+                "messages": [{"role": "user", "content": "Hello"}],
+                "stream": True,
+            },
+        )
+
+    assert response.status_code == 200
+    body = response.text
+    assert "chat.completion.chunk" in body
+    assert "stream answer" in body
+    assert "data: [DONE]" in body
